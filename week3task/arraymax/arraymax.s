@@ -3,16 +3,18 @@ text1: .asciz "This application will calculate the max num from the following ar
 .set len1, . - text1
 text2: .asciz "[18,2,36,1,86,42] \n"
 .set len2, . - text2
-numbers: .byte 18, 2, 36, 1, 86, 42
-numCount = 6
-newline: .asciz "\n"
 output: .asciz "Max: "
 .set lenOutput, . - output
+newline: .asciz "\n"
 
 .section .bss
-.balign 4
-max: .skip 4
+.balign 8
+max: .skip 8
 buffer: .skip 12  # Buffer to hold the string representation of the maximum number
+
+.section .data
+numbers: .byte 18, 2, 36, 1, 86, 42
+numCount = 6
 
 .section .text
 .globl _start
@@ -76,47 +78,55 @@ not_bigger:
     mov %eax, max(%rip)          # Store the maximum value in max
     ret                          # Return from _calculateMax
 
-# Function to convert integer to string
-_intToStr:
-    mov $buffer+11, %rdi         # Set rdi to end of buffer
-    mov %edi, %eax               # Move the integer to eax
-    mov $10, %ebx                # Base 10
-    xor %ecx, %ecx               # Clear ecx for digit count
+# Function to convert integer to ASCII
+_intToAscii:
+    mov $0, %rcx         # Counter for digits
+    mov $10, %rbx        # Base 10 divisor
 
-.convert_loop:
-    xor %edx, %edx               # Clear edx
-    div %ebx                     # Divide eax by 10, quotient in eax, remainder in edx
-    add $'0', %dl                # Convert remainder to ASCII
-    dec %rdi                     # Move backward in buffer
-    mov %dl, (%rdi)              # Store the digit
-    inc %ecx                     # Increment digit count
-    test %eax, %eax              # Check if quotient is 0
-    jnz .convert_loop            # If not, continue loop
+convert_int_loop:
+    xor %rdx, %rdx       # Clear dx for division
+    div %rbx             # Divide rax by rbx, remainder in rdx, quotient in rax
+    add $'0', %dl        # Convert remainder to ASCII digit
+    push %rdx            # Push ASCII digit to stack
+    inc %rcx             # Increment digit counter
+    test %rax, %rax      # Check if quotient is zero
+    jnz convert_int_loop # If not, continue conversion
 
-    lea buffer(%rip), %rsi       # Load the buffer address
-    add $12, %rsi                # Adjust to the end of the buffer
-    sub %ecx, %esi               # Calculate the start of the number string
-    ret                          # Return with rsi pointing to the start of the number string
+print_digits_loop:
+    pop %rax             # Pop ASCII digit from stack
+    mov %al, (%rsi)      # Store ASCII digit in result buffer
+    inc %rsi             # Move to next position in buffer
+    loop print_digits_loop
 
+    ret
+    
 # Function to print the maximum number
 _printMax:
-    mov $1, %eax                 # syscall number for sys_write
-    mov $1, %edi                 # file descriptor 1 (stdout)
-    lea output(%rip), %rsi       # Load effective address of output
-    mov $lenOutput, %edx         # Length of output string
-    syscall                      # Invoke syscall to print output
+    # Print the "Max: " prefix
+    mov $1, %rax
+    mov $1, %rdi
+    lea output(%rip), %rsi
+    mov $lenOutput, %rdx
+    syscall
 
+    # Convert max to ASCII and print it
     mov max(%rip), %edi          # Load the maximum number into edi
-    call _intToStr               # Convert integer to string
+    lea buffer(%rip), %rsi       # Load buffer address into rsi
+    call _intToAscii             # Convert integer to ASCII
 
-    mov $1, %eax                 # syscall number for sys_write
-    mov $1, %edi                 # file descriptor 1 (stdout)
-    mov %rdi, %rsi               # Load the string address
-    mov $12, %edx                # Length of the string (max 12 bytes)
-    syscall                      # Invoke syscall to print
+    # Print the converted ASCII number
+    mov $1, %rax
+    mov $1, %rdi
+    lea buffer(%rip), %rsi
+    mov $12, %rdx                # Assume maximum length of 12 digits
+    syscall
 
-    lea newline(%rip), %rsi      # Load newline address
-    mov $1, %edx                 # Length of newline (1 byte)
-    syscall                      # Invoke syscall to print newline
+    # Print the newline character
+    mov $1, %rax
+    mov $1, %rdi
+    lea newline(%rip), %rsi
+    mov $1, %rdx
+    syscall
 
-    ret                          # Return from _printMax
+    ret
+
